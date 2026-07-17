@@ -50,8 +50,8 @@ var Burnvis = {
 };
 
 // Visualize Fires by filters in order of least filtered to most filtered
-Map.addLayer(BurnPerimeter, {color: 'grey'}, 'All MTBS fires 1984-2022'); // use for checking intersections
-Map.addLayer(largeFires, {color: 'pink'}, 'Fires 2000-2014'); // Use the largeFires of n=102 fires >17,000 acres
+Map.addLayer(BurnPerimeter, {color: 'black'}, 'All MTBS fires 1984-2024'); // use for checking intersections
+Map.addLayer(largeFires, {color: 'orange'}, 'Fires 2000-2014'); // Use the largeFires of n=102 fires >17,000 acres
 
 // Attempt to convert all geometries to Polygon or MultiPolygon
 var cleanedBurnPerimeter = BurnPerimeter.map(function(feature) {
@@ -772,6 +772,62 @@ var unburnedWithAspect = plotList
 print('Unburned plot aspect distribution:',
   unburnedWithAspect.aggregate_array('asp_class_derived')
     .reduce(ee.Reducer.frequencyHistogram()));    
+
+// Get the Ecoregion CA shape file
+var ecoregions = ee.FeatureCollection("EPA/Ecoregions/2013/L3");
+
+// ── Visual check: show Klamath and Sierra Nevada polygons on the map ────────
+var klamath = ecoregions.filter(ee.Filter.eq('us_l3name', 'Klamath Mountains/California High North Coast Range'));
+var sierra  = ecoregions.filter(ee.Filter.eq('us_l3name', 'Sierra Nevada'));
+
+Map.centerObject(ecoregions.filter(ee.Filter.eq('us_l3name', 'Sierra Nevada')), 6);
+Map.addLayer(klamath, {color: 'blue'}, 'Klamath Mountains');
+Map.addLayer(sierra, {color: 'red'}, 'Sierra Nevada');
+
+// ── Print check: confirm exact ecoregion names in this dataset ─────────────
+print('All CA-relevant ecoregion names:', 
+  ecoregions.aggregate_array('us_l3name').distinct());
+
+// ── Test the spatial join on a SMALL sample first, not the full plotList ───
+var testSample = plotList.limit(20);  // just 20 plots to sanity-check
+
+var testJoined = testSample.map(function(pt) {
+  var match = ecoregions.filterBounds(pt.geometry()).first();
+  return pt.set('ecoregion', match.get('us_l3name'));
+});
+
+print('Test sample with ecoregion attached:', testJoined);
+
+// Spatial join: attach us_l3name to each plot
+var plotsWithEcoregion = plotList.map(function(pt) {
+  var match = ecoregions.filterBounds(pt.geometry()).first();
+  return pt.set('ecoregion', match.get('us_l3name'));
+});
+
+var plotsWithEcoregion = plotList.map(function(pt) {
+  var match = ecoregions.filterBounds(pt.geometry()).first();
+  var ecoName = ee.Algorithms.If(match, match.get('us_l3name'), 'NO_MATCH');
+  return pt.set('ecoregion', ecoName);
+});
+
+var testJoined = plotList.limit(500).map(function(pt) {
+  var match = ecoregions.filterBounds(pt.geometry()).first();
+  var ecoName = ee.Algorithms.If(match, match.get('us_l3name'), 'NO_MATCH');
+  return pt.set('ecoregion', ecoName);
+});
+
+print('Count of NO_MATCH in sample of 500:', 
+  testJoined.filter(ee.Filter.eq('ecoregion', 'NO_MATCH')).size());
+
+// Export as CSV
+Export.table.toDrive({
+  collection: plotsWithEcoregion,
+  description: 'plots_with_ecoregion',
+  fileFormat: 'CSV',
+  selectors: ['plot_key', 'ecoregion']   // only export what you need
+});
+
+STOP
 
 // -------------------------------Dynamic Image Collections---------------------------//
 // weighted means versus point extractions

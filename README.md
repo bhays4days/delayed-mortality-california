@@ -15,6 +15,7 @@
 | Hansen Global Forest | `UMD/hansen/global_forest_change_2023_v1_11` | Hansen et al. 2013 |
 | JRC Surface Water | `JRC/GSW1_4/GlobalSurfaceWater` | Pekel et al. 2016 |
 | SRTM Elevation | `USGS/SRTMGL1_003` | Farr et al. 2007 |
+| EPA Level III Ecoregions | `EPA/Ecoregions/2013/L3` | US Environmental Protection Agency, 2013 |
 
 ## GEE Assets
   

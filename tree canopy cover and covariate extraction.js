@@ -2,6 +2,7 @@
 // Raster extraction by point list                                                        //
 // Code by: Britt Hays                                                            //
 //                                                                                       //
+// Load CA boundary from TIGER dataset
 ////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////
 // Create feature collection for CA
@@ -93,13 +94,14 @@ Map.addLayer(exportPolygons_fixed, {color: 'orange'}, 'Polygons to Export'); // 
 //   fileNamePrefix: 'MTBS_Fire_Polygons',
 //   description: 'MTBS_Fire_Polygons'
 // });
-// Shape file: MTBS fires >400 ha Polygons in CA, OR, AZ, NV
+
+// Shape file: MTBS fires 2000-2014
 // Export.table.toDrive({
 //   collection: largeFires, // use the limit function to export partial data
 //   folder: 'EarthEngine',
 //   fileFormat: 'SHP',
-//   fileNamePrefix: 'Fire_Polygons_102',
-//   description: 'Fire_Polygons_102'
+//   fileNamePrefix: 'Fire_Polygons',
+//   description: 'Fire_Polygons'
 // });
 // Download 
 
@@ -165,6 +167,279 @@ print(plotBuffers.limit(1), 'Buffer geometry check');
 Map.addLayer(plotBuffers, {color: 'black'}, 'Point Buffers');
 Map.addLayer(plotList,{color:'blue'},'Plots',true);
 
+// Load CA boundary from TIGER dataset
+// ============================================================
+// CALIFORNIA EVT 2001 AREA + PERCENT OF CALIFORNIA
+// ============================================================
+
+// California boundary
+var ca_boundary = ee.FeatureCollection('TIGER/2016/States')
+  .filter(ee.Filter.eq('NAME', 'California'));
+
+var ca_geom = ca_boundary.geometry();
+
+// Load EVT 2001
+var evt_2001 = ee.Image(
+  'projects/britthays-uwyo/assets/EVT2001'
+).select('b1');
+
+// ------------------------------------------------------------
+// Check projection and scale
+// ------------------------------------------------------------
+
+print('EVT image:', evt_2001);
+print('EVT projection:', evt_2001.projection());
+print('EVT nominal scale:', evt_2001.projection().nominalScale());
+print('EVT band names:', evt_2001.bandNames());
+
+// ------------------------------------------------------------
+// Pixel area
+// ------------------------------------------------------------
+
+// pixelArea() = square meters
+// Divide by 10,000 = hectares
+var pixelAreaHa = ee.Image.pixelArea().divide(10000);
+
+// ------------------------------------------------------------
+// Calculate TOTAL California area
+// ------------------------------------------------------------
+
+var totalAreaDict = pixelAreaHa.reduceRegion({
+  reducer: ee.Reducer.sum(),
+  geometry: ca_geom,
+  crs: 'EPSG:5070',
+  scale: 30,
+  maxPixels: 1e13,
+  tileScale: 4
+});
+
+var totalCAHa = ee.Number(totalAreaDict.get('area'));
+
+var totalCAkm2 = totalCAHa.divide(100);
+
+print('Total California area (ha):', totalCAHa);
+print('Total California area (km2):', totalCAkm2);
+
+
+// ============================================================
+// FUNCTION TO CALCULATE EVT GROUP AREA
+// ============================================================
+
+function calcEVTArea(group_name, evt_codes) {
+
+  // Build mask for all codes in this group
+  var group_mask = evt_2001.eq(evt_codes[0]);
+
+  for (var i = 1; i < evt_codes.length; i++) {
+    group_mask = group_mask.or(
+      evt_2001.eq(evt_codes[i])
+    );
+  }
+
+  // Area image masked to this EVT group
+  var groupArea = pixelAreaHa.updateMask(group_mask);
+
+  // Sum area within California
+  var areaDict = groupArea.reduceRegion({
+    reducer: ee.Reducer.sum(),
+    geometry: ca_geom,
+    crs: 'EPSG:5070',
+    scale: 30,
+    maxPixels: 1e13,
+    tileScale: 4
+  });
+
+  var areaHa = ee.Number(
+    areaDict.get('area')
+  );
+
+  var areaKm2 = areaHa.divide(100);
+
+  // Percentage of California
+  var percentCA = areaHa
+    .divide(totalCAHa)
+    .multiply(100);
+
+  return ee.Feature(null, {
+    'EVT_Group': group_name,
+    'Area_ha': areaHa,
+    'Area_km2': areaKm2,
+    'Percent_CA': percentCA,
+    'EVT_Codes': evt_codes.join(',')
+  });
+}
+
+
+// ============================================================
+// DEFINE EVT GROUPS
+// ============================================================
+
+var ca_dry_mesic = calcEVTArea(
+  'CA Dry Mixed Conifer',
+  [2027, 3027, 2031, 3031]
+);
+
+var ca_mesic = calcEVTArea(
+  'CA Mesic Mixed Conifer',
+  [2028, 3028]
+);
+
+var ca_montane = calcEVTArea(
+  'CA Montane Conifer',
+  [2033, 2044, 2058, 3030, 3033, 2032, 3032]
+);
+
+var ca_mixed_evergreen = calcEVTArea(
+  'CA Mixed Evergreen Hardwood',
+  [2043, 3043, 2014, 3014]
+);
+
+var ca_oak = calcEVTArea(
+  'CA Mixed Oak Woodland',
+  [2029, 2030, 2112, 2113, 2114, 2118, 3029, 2008]
+);
+
+var non_forest = calcEVTArea(
+  'Non-Forest',
+  [3182, 3098, 3129, 3184, 3114, 3299, 3221,
+   2182, 2138, 2184]
+);
+
+var riparian = calcEVTArea(
+  'Riparian',
+  [2152, 3138, 3152, 2154]
+);
+
+var other_forest = calcEVTArea(
+  'Other Forest',
+  [2021, 2022, 2034, 2099, 2170, 3021, 3022,
+   3034, 2017, 2019, 2062, 2203, 2061, 2177]
+);
+
+var redwood = calcEVTArea(
+  'CA Coastal Redwood',
+  [2015, 3015]
+);
+
+var chaparral = calcEVTArea(
+  'Chaparral Shrubland',
+  [2098, 2105]
+);
+
+
+// ============================================================
+// COMBINE RESULTS
+// ============================================================
+
+var results = ee.FeatureCollection([
+  ca_dry_mesic,
+  ca_mesic,
+  ca_montane,
+  ca_mixed_evergreen,
+  ca_oak,
+  non_forest,
+  riparian,
+  other_forest,
+  redwood,
+  chaparral
+]);
+
+
+// ============================================================
+// PRINT RESULTS
+// ============================================================
+
+print('==========================================');
+print('EVT GROUP RESULTS');
+print('==========================================');
+
+print(results);
+
+print(
+  'Total % represented by listed groups:',
+  results.aggregate_sum('Percent_CA')
+);
+
+
+// ============================================================
+// CHECK WHETHER GROUPS COVER ALL CALIFORNIA
+// ============================================================
+
+var classifiedAreaHa = results.aggregate_sum('Area_ha');
+
+var classifiedPercent = ee.Number(classifiedAreaHa)
+  .divide(totalCAHa)
+  .multiply(100);
+
+var unclassifiedPercent = ee.Number(100)
+  .subtract(classifiedPercent);
+
+var unclassifiedHa = ee.Number(totalCAHa)
+  .subtract(classifiedAreaHa);
+
+print('------------------------------------------');
+print('CLASSIFICATION COVERAGE CHECK');
+print('------------------------------------------');
+
+print(
+  'Area represented by listed EVT groups (ha):',
+  classifiedAreaHa
+);
+
+print(
+  'Percent of CA represented by listed groups:',
+  classifiedPercent
+);
+
+print(
+  'Unclassified/other area (ha):',
+  unclassifiedHa
+);
+
+print(
+  'Unclassified/other percent:',
+  unclassifiedPercent
+);
+
+
+var testCodes = [2027, 3027, 2031, 3031];
+
+testCodes.forEach(function(code) {
+
+  var mask = evt_2001.eq(code);
+
+  var area = ee.Image.pixelArea()
+    .divide(10000)
+    .updateMask(mask)
+    .reduceRegion({
+      reducer: ee.Reducer.sum(),
+      geometry: ca_geom,
+      crs: 'EPSG:5070',
+      scale: 30,
+      maxPixels: 1e13,
+      tileScale: 4
+    });
+
+  print(
+    'EVT code ' + code + ' area ha:',
+    area.get('area')
+  );
+});
+
+
+// ============================================================
+// EXPORT CSV
+// ============================================================
+
+// Export.table.toDrive({
+//   collection: results,
+//   description: 'CA_EVT_Statewide_Coverage',
+//   fileNamePrefix: 'CA_EVT_Statewide_Coverage',
+//   fileFormat: 'CSV'
+// });
+
+STOP
+
 // ── 4. EXTRACTION TEMPLATE ────────────────────────────────────────────────────
 // POINT extraction (topography, burn severity, categorical)
 var extractPoint = function(image, plotFC, bandName, description) {
@@ -205,10 +480,10 @@ var extractMean = function(image, plotFC, bandName, description) {
 
 // -- Plots_Usable_Final_Clean.csv -- //
 // These are the Fire Ploygons filtered in R that underwent the spatial intersection
-var cleanfires = ee.FeatureCollection('projects/ee-brittnhays/assets/Plots_Useable_Final_Clean');
+var cleanfires = ee.FeatureCollection('projects/britthays-uwyo/assets/Plots_Usable_Final_Clean_08_2026');
 // Get 195 clean Fire_IDs
-var cleanPlots = ee.FeatureCollection('projects/ee-brittnhays/assets/Plots_Useable_Final_Clean');
-print('Total plots:', cleanPlots.size());           // should be 22,041
+var cleanPlots = ee.FeatureCollection('projects/britthays-uwyo/assets/Plots_Usable_Final_Clean_08_2026');
+print('Total plots:', cleanPlots.size());           // should be 20,675
 print('Unique fires:', cleanPlots.aggregate_array('Fire_ID').distinct().size()); // should be 175
 
 // ── Verify Fire_ID parsing before map ─────────────────────────────────────────
@@ -241,7 +516,7 @@ print('Geometry type:', plotList.first().geometry().type());
 print('Ig_Year:', plotList.first().get('Ig_Year'));
 print('formatted_date:', plotList.first().get('formatted_date'));
 print('Fire_ID:', plotList.first().get('Fire_ID'));
-// Expect: 22041, Point, 2009, 2009-01-01, CA...
+// Expect: 20675, Point, 2009, 2009-01-01, CA...
 
 // ── Confirm plotList is ready for extraction ───────────────────────────────────
 print('plotList ready:', plotList.size());          // 22041
@@ -826,8 +1101,6 @@ Export.table.toDrive({
   fileFormat: 'CSV',
   selectors: ['plot_key', 'ecoregion']   // only export what you need
 });
-
-STOP
 
 // -------------------------------Dynamic Image Collections---------------------------//
 // weighted means versus point extractions
@@ -2361,3 +2634,6 @@ STOP
 //compare against the RAP TRE trajectory — plots where RAP TRE declines gradually years after fire but Hansen lossyear fires late would be your delayed mortality signal.
 
 // Google Earth Pro Manual Visual Check of Plot Subset
+
+
+

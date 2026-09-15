@@ -21,7 +21,7 @@
   
 ### Ch1 Plot Centroids
 - **GEE Asset path:** `projects/ee-brittnhays/assets/Plots_Useable_Final_Clean`
-- **Description:** 22,041 1-ha circular virtual plot centroids (56m radius)
+- **Description:** 20,675 1-ha circular virtual plot centroids (56m radius)
   generated within and surrounding 175 CA MTBS fire perimeters (2000-2014)
 - **Properties:** plot_key, Fire_ID, Ig_Year, Correct_Plot_Label_final,
   lat, long, focal_year, Category

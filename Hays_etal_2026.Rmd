@@ -1,28 +1,9 @@
 ---
-title: "Hays_Ecosphere_06_17_2026_Hays"
+title: "Sizing up the importance of delayed post-fire mortality in California’s forests"
 author: "Britt Hays"
 date: "`r Sys.Date()`"
 output: pdf_document
 ---
-
-```{r}
-#install.packages(c("usethis", "gitcreds"))
-Sys.which("git")
-
-usethis::use_git_remote("origin", "https://github.com/bhays4days/delayed-mortality-california.git")
-
-gitcreds::gitcreds_set()
-
-usethis::use_git()
-```
-```{r}
-gert::git_add("C:/Users/bhays5/Desktop/CalFire/Raw_221/Data/2026/Hays_Ecosphere_06_2026.Rmd")
-gert::git_commit("Add 2026 R Markdown file for Data Analysis")
-gert::git_push()
-
-```
-
-
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)

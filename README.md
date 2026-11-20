@@ -1,5 +1,5 @@
 # delayed-mortality-california
-"Impacts of fire and drought on delayed tree mortality patterns in California "
+"Sizing up the importance of delayed post-fire mortality in California’s forests"
 
 ## External GEE Assets Used
 

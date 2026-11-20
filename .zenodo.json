@@ -5,6 +5,7 @@
     {"name": "Hays, Brittany", "affiliation": "Program in Ecology and Evolution, University of Wyoming"}
   ],
   "description": "Data and code for the study on delayed post-fire tree mortality in California forests.",
-  "access_right": "open",
+  "access_right": "embargoed",
+  "embargo_date": "2027-12-01",
   "license": "CC-BY-4.0"
 }
